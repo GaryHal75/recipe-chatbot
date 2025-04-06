@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAISS Chatbot</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            background-color: #1e1e1e;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #main-wrapper {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+            width: 95%;
+            max-width: 1200px;
+        }
+
+        .loading-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Loading Message */
+        #loading-message {
+            display: block;
+            background: #3a3a3a;
+            color: white;
+            text-align: left;
+            min-width: 220px;
+            max-width: 250px;
+            height:0px;
+            overflow: hidden;
+            transition: height 0.3s ease-in-out;
+        }
+
+        /* Chat Container */
+        #chat-container {
+            width: 90%;
+            max-width: 800px;
+            background: #2c2c2c;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Chat Box */
+        #chat-box {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1em;
+            border-bottom: 2px solid #444;
+            word-wrap: break-word;
+            scrollbar-width: thin;
+            scrollbar-color: #666 #2c2c2c;
+        }
+
+        /* Scrollbar Styling */
+        #chat-box::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-box::-webkit-scrollbar-thumb {
+            background: #666;
+            border-radius: 4px;
+        }
+
+        /* Message Bubbles */
+        .message {
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background: #0078ff;
+            align-self: flex-end;
+            color: white;
+            text-align: right;
+        }
+
+        .bot-message {
+            background: #3a3a3a;
+            color: white;
+            text-align: left;
+        }
+
+        /* Input Section */
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background: #2c2c2c;
+            border-top: 2px solid #444;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            background: #1e1e1e;
+            color: white;
+            outline: none;
+            margin-right: 10px;
+        }
+
+        /* Send Button */
+        #send-btn {
+            background: #0078ff;
+            color: white;
+            padding: 12px 18px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s ease-in-out;
+        }
+
+        #send-btn:hover {
+            background: #005fcc;
+        }
+
+        #reset-btn {
+            background: #ff4c4c;
+            color: white;
+            padding: 12px 18px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s ease-in-out;
+            margin-left: 10px;
+        }
+
+        #reset-btn:hover {
+            background: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-wrapper">
+        <div class="loading-wrapper">
+            <div id="loading-message">Checking Franchise list for updates... please wait.</div>
+        </div>
+        <div id="chat-container">
+            <div id="chat-box"></div>
+            <div id="input-container">
+                <input type="text" id="user-input" placeholder="Type your question..." autofocus>
+                <button id="send-btn">Send</button>
+                <button id="reset-btn" title="Want to clear your current query or comparison?">Reset Chat?</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("send-btn").addEventListener("click", sendMessage);
+        document.getElementById("user-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") sendMessage();
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", function () {
+            const chatBox = document.getElementById("chat-box");
+            const userMessage = document.createElement("div");
+            userMessage.classList.add("message", "user-message");
+            userMessage.textContent = "Reset Chat?";
+            chatBox.appendChild(userMessage);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const loadingMessage = document.getElementById("loading-message");
+            loadingMessage.style.height = "auto;";
+
+            fetch("/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: "__RESET_CHAT__" })
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                const botMessage = document.createElement("div");
+                botMessage.classList.add("message", "bot-message");
+                chatBox.appendChild(botMessage);
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                let botResponse = "";
+
+                function read() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            loadingMessage.style.display = "none";
+                            return;
+                        }
+                        botResponse += decoder.decode(value, { stream: true });
+                        botMessage.textContent = botResponse;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        read();
+                    });
+                }
+                read();
+            });
+        });
+
+        function sendMessage() {
+            const userInput = document.getElementById("user-input").value.trim();
+            if (!userInput) return;
+
+            const chatBox = document.getElementById("chat-box");
+            const userMessage = document.createElement("div");
+            userMessage.classList.add("message", "user-message");
+            userMessage.textContent = userInput;
+            chatBox.appendChild(userMessage);
+            document.getElementById("user-input").value = "";
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Show loading message
+            const loadingMessage = document.getElementById("loading-message");
+            loadingMessage.style.display = "block";
+
+            fetch("/search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: userInput })
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                const botMessage = document.createElement("div");
+                botMessage.classList.add("message", "bot-message");
+                chatBox.appendChild(botMessage);
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                let botResponse = "";
+
+                function read() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            // Hide loading message
+                            loadingMessage.style.display = "none";
+                            return;
+                        }
+                        botResponse += decoder.decode(value, { stream: true });
+                        botMessage.textContent = botResponse;
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        read();
+                    });
+                }
+                read();
+            });
+        }
+    </script>
+</body>
+</html>
