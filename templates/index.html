@@ -208,7 +208,7 @@
                             return;
                         }
                         botResponse += decoder.decode(value, { stream: true });
-                        botMessage.textContent = botResponse;
+                        botMessage.innerHTML = botResponse;
                         chatBox.scrollTop = chatBox.scrollHeight;
                         read();
                     });
@@ -258,7 +258,7 @@
                             return;
                         }
                         botResponse += decoder.decode(value, { stream: true });
-                        botMessage.textContent = botResponse;
+                        botMessage.innerHTML = botResponse;
                         chatBox.scrollTop = chatBox.scrollHeight;
                         read();
                     });

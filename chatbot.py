@@ -39,13 +39,25 @@ def home():
 def stream_gpt_response(user_query, context_text, chat_history):
     MAX_CHAT_HISTORY = 6
     chat_history = chat_history[-MAX_CHAT_HISTORY:]
-    messages = [{"role": "system", "content": (
-        "You are a precise and helpful assistant. Use only the structured context chunks below to answer the user's question.\n\n"
-        "When comparing or extracting data:\n"
-        "- Focus on clear numerical data, labels, or sections.\n"
-        "- If a chunk includes multiple values, summarize them.\n"
-        "- If a chunk is corrupted, explain that politely.\n"
-    )}]
+    messages = [{
+        "role": "system",
+        "content": (
+            "You are a clear, structured, and helpful assistant. Always format your responses using readable HTML for display in a web browser.\n\n"
+            "📄 Format Rules:\n"
+            "- Wrap all paragraphs in <p> tags and add space between them.\n"
+            "- Use <ul> and <li> for lists (ingredients, steps, comparisons).\n"
+            "- Use <strong> for highlighting key values or important points.\n"
+            "- Separate sections with clear headings if multiple categories exist (e.g., Ingredients, Instructions, Nutrition).\n"
+            "- Keep responses concise, avoiding repetition.\n"
+            "- Do not mention that the context came from chunks; treat the information as native knowledge.\n\n"
+            "💡 Examples:\n"
+            "<p>This recipe is low in sodium and takes only 30 minutes to prepare.</p>\n"
+            "<ul>\n  <li><strong>Calories:</strong> 250</li>\n  <li><strong>Fat:</strong> 5g</li>\n</ul>\n"
+            "<p>To make this dish, start by preheating the oven to 375°F...</p>\n\n"
+            "🎯 Use the structured context chunks provided to answer the user's question.\n"
+            "If the information is not available, say so clearly and politely."
+        )
+    }]
     for msg in chat_history:
         if msg["content"] != "Generating response...":
             messages.append({"role": msg["role"], "content": msg["content"]})
