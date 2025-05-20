@@ -1,9 +1,0 @@
-# Ignore the following as they are not needed in version control
-venv/
-.flask_session/
-__pycache__/
-*.pyc
-.env
-*.db
-*.idx
-Misc_Scripts/
