@@ -1,4 +1,4 @@
-# 🧠 SlidingWindow Recipe Chatbot
+# 🧠 Recipe Chatbot
 
 A full-stack chatbot powered by OpenAI embeddings + FAISS, designed to search, compare, and remix recipes extracted from structured PDF files.
 
