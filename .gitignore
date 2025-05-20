@@ -1,0 +1,17 @@
+
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Environment secrets
+.env
+
+# FAISS index and database files
+*.db
+*.db-wal
+*.db-shm
+*.idx
