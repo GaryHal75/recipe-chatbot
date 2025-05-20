@@ -11,15 +11,25 @@ def setup_text_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # Drop the old text_chunks table if it exists to avoid conflicts
+    cursor.execute('DROP TABLE IF EXISTS text_chunks')
+
+    # Drop the recipe_embeddings table if it exists, then create the enhanced schema
+    cursor.execute('DROP TABLE IF EXISTS recipe_embeddings')
+
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS text_chunks (
+        CREATE TABLE recipe_embeddings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
             token_count INTEGER NOT NULL,
-            doc_type TEXT DEFAULT 'general',
-            metadata TEXT
+            embedding TEXT,
+            model TEXT DEFAULT 'openai-ada-002',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            metadata TEXT,
+            is_embedded INTEGER DEFAULT 0,
+            is_deleted INTEGER DEFAULT 0
         )
     ''')
 

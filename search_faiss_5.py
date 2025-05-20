@@ -29,17 +29,34 @@ def search_and_filter(query, row_id_scope=None):
     requested_top_k = extract_top_k(query)
 
     results = search_faiss(query_embedding, top_k=requested_top_k + 5)
-
     print("✅ Processing results...")
 
-    structured_results = []
+    grouped = {}
     for r in results:
-        structured_results.append({
+        filename = r.get("filename", "[Unknown]")
+        if filename not in grouped:
+            grouped[filename] = {
+                "filename": filename,
+                "chunks": [],
+                "best_score": float("inf")
+            }
+
+        chunk_data = {
             "row_id": r["row_id"],
             "chunk_index": r["chunk_index"],
             "distance_score": round(r["distance"], 4),
             "text": r.get("text", "[No content found]")
-        })
+        }
+
+        grouped[filename]["chunks"].append(chunk_data)
+        if r["distance"] < grouped[filename]["best_score"]:
+            grouped[filename]["best_score"] = r["distance"]
+
+    # Sort by best score across recipes
+    structured_results = sorted(
+        grouped.values(),
+        key=lambda x: x["best_score"]
+    )
 
     return structured_results
 
@@ -50,4 +67,8 @@ if __name__ == "__main__":
     if not results or "error" in results[0]:
         print(f"⚠️ {results[0].get('error', 'No search results found.')}")
     else:
-        print(json.dumps(results, indent=2))
+        for item in results:
+            print(f"\n📄 {item['filename']} | Best Score: {round(item['best_score'],4)}")
+            for chunk in item['chunks']:
+                print(f"  Chunk {chunk['chunk_index']} | Score: {chunk['distance_score']}")
+                print(f"  {chunk['text']}")

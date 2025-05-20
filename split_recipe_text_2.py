@@ -6,7 +6,7 @@ import tiktoken
 
 # Configurations
 DB_PATH = "recipe_text_chunks.db"
-INPUT_FOLDER = "Outputs/"  # Process all cleaned text files
+INPUT_FOLDER = "Outputs/flattened/"  # Process all cleaned text files
 TOKEN_LIMIT = 10000  # Max tokens per chunk
 OVERLAP = 1500  # Tokens that overlap between chunks
 
@@ -15,19 +15,22 @@ def count_tokens(text):
     enc = tiktoken.encoding_for_model("gpt-4-turbo")
     return len(enc.encode(text))
 
-def split_text_into_windows(text):
-    """Splits the full document text into overlapping sliding windows."""
-    words = text.split()  # Basic tokenization
+def extract_labeled_chunks(text):
+    labels = ["TITLE:", "SERVINGS:", "COST:", "INGREDIENTS:", "DIRECTIONS:", "NUTRITION:", "FOOD GROUPS:", "SOURCE:"]
     chunks = []
-    start = 0
+    current_label = None
+    buffer = []
 
-    while start < len(words):
-        end = min(start + TOKEN_LIMIT, len(words))
-        chunk = " ".join(words[start:end])
-        chunks.append(chunk)
-
-        # Move start forward, keeping an overlap
-        start = end - OVERLAP if end < len(words) else len(words)
+    for line in text.splitlines():
+        if any(line.startswith(label) for label in labels):
+            if current_label and buffer:
+                chunks.append(f"{current_label}\n" + "\n".join(buffer).strip())
+            current_label = line.strip()
+            buffer = []
+        else:
+            buffer.append(line)
+    if current_label and buffer:
+        chunks.append(f"{current_label}\n" + "\n".join(buffer).strip())
 
     return chunks
 
@@ -38,8 +41,10 @@ def store_chunks_in_db(filename, chunks):
 
     for i, chunk in enumerate(chunks):
         token_count = count_tokens(chunk)
-        cursor.execute("INSERT INTO text_chunks (filename, chunk_index, content, token_count, doc_type, metadata) VALUES (?, ?, ?, ?, ?, ?)",
-                       (filename, i, chunk, token_count, "general", None))
+        cursor.execute("""
+            INSERT INTO recipe_embeddings (filename, chunk_index, content, token_count, metadata)
+            VALUES (?, ?, ?, ?, ?)
+        """, (filename, i, chunk, token_count, None))
 
     conn.commit()
     conn.close()
@@ -62,7 +67,7 @@ def process_recipe_text():
         with open(file_path, "r", encoding="utf-8") as f:
             full_text = f.read()
 
-        chunks = split_text_into_windows(full_text)
+        chunks = extract_labeled_chunks(full_text)
         store_chunks_in_db(file, chunks)
         print(f"✅ Processed and stored chunks from {file}.")
 

@@ -176,14 +176,24 @@
 
         document.getElementById("reset-btn").addEventListener("click", function () {
             const chatBox = document.getElementById("chat-box");
-            const userMessage = document.createElement("div");
-            userMessage.classList.add("message", "user-message");
-            userMessage.textContent = "Reset Chat?";
-            chatBox.appendChild(userMessage);
+            chatBox.innerHTML = "";
+
+            // Flash message
+            const flashMessage = document.createElement("div");
+            flashMessage.classList.add("message", "bot-message");
+            flashMessage.textContent = "✅ Chat has been reset.";
+            chatBox.appendChild(flashMessage);
+
+            // Welcome message
+            const welcomeMessage = document.createElement("div");
+            welcomeMessage.classList.add("message", "bot-message");
+            welcomeMessage.textContent = "👋 Welcome! Ask me about ingredients, compare recipes, or create something new.";
+            chatBox.appendChild(welcomeMessage);
+
             chatBox.scrollTop = chatBox.scrollHeight;
 
             const loadingMessage = document.getElementById("loading-message");
-            loadingMessage.style.height = "auto;";
+            loadingMessage.style.display = "block";
 
             fetch("/search", {
                 method: "POST",

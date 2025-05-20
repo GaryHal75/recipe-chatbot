@@ -17,7 +17,11 @@ def load_embeddings():
     """Loads embeddings from SQLite for FAISS indexing."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, filename, chunk_index, embedding FROM vector_chunks WHERE model = ?", ("text-embedding-ada-002",))
+    cursor.execute("""
+        SELECT id, filename, chunk_index, embedding
+        FROM recipe_embeddings
+        WHERE is_embedded = 1 AND is_deleted = 0 AND model = ?
+    """, ("text-embedding-ada-002",))
     
     ids, metadata, embeddings = [], [], []
     
@@ -29,6 +33,7 @@ def load_embeddings():
         metadata.append((filename, chunk_index))
         embeddings.append(vector)
     
+    print(f"📊 Loaded {len(embeddings)} embeddings from the database.")
     assert all(vec.shape[0] == embeddings[0].shape[0] for vec in embeddings), "Inconsistent embedding dimensions!"
     conn.close()
     return np.array(embeddings, dtype=np.float32), ids, metadata
@@ -36,6 +41,10 @@ def load_embeddings():
 def build_and_save_index():
     """Builds FAISS index and saves it to disk with correct SQLite row mappings."""
     embeddings, ids, metadata = load_embeddings()
+
+    if embeddings.shape[0] == 0:
+        print("❌ No embeddings loaded. Skipping FAISS index creation.")
+        return
 
     # Create a FAISS index (L2 distance)
     index = faiss.IndexFlatL2(embeddings.shape[1])
@@ -47,9 +56,14 @@ def build_and_save_index():
     index = faiss.IndexIDMap(index)
     index.add_with_ids(embeddings, id_map)
 
-    # Save the index to disk
-    faiss.write_index(index, FAISS_INDEX_FILE)
-    print(f"✅ FAISS index saved with {len(ids)} vectors, mapped to SQLite row IDs.")
+    # Debug log just before writing the index
+    print(f"💾 Preparing to write FAISS index with {len(ids)} vectors to {FAISS_INDEX_FILE}")
+    # Save the index to disk with error handling
+    try:
+        faiss.write_index(index, FAISS_INDEX_FILE)
+        print(f"✅ FAISS index saved with {len(ids)} vectors, mapped to SQLite row IDs.")
+    except Exception as e:
+        print(f"❌ Failed to write FAISS index: {e}")
 
 def load_faiss_index():
     """Loads FAISS index from disk, or rebuilds it if missing."""
@@ -88,8 +102,8 @@ def search_faiss(query_embedding, top_k=5):
 
         # Query updated to fetch using the correct ID column
         cursor.execute("""
-            SELECT id, filename, chunk_index, content 
-            FROM vector_chunks 
+            SELECT id, filename, chunk_index, content
+            FROM recipe_embeddings
             WHERE id = ?
             """, (row_id,))  # Only using id, not chunk_index
 
@@ -108,3 +122,6 @@ def search_faiss(query_embedding, top_k=5):
 
     conn.close()
     return results
+
+if __name__ == "__main__":
+    build_and_save_index()

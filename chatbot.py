@@ -90,27 +90,37 @@ def search():
 
     print(f"🔍 User Query: {user_query}")
 
+    # Reset chat handling
+    if "__reset_chat__" in user_query:
+        print("🔄 Reset command received. Clearing session.")
+        session.clear()
+        return jsonify({"message": "Chat session has been reset."}), 200
+
     if "chat_history" not in session:
         session["chat_history"] = []
     session["chat_history"].append({"role": "user", "content": user_query})
     session["last_user_query"] = user_query
 
-    results = search_and_filter(user_query) if not is_followup_query(user_query) else None
+    grouped_results = search_and_filter(user_query)
 
-    if not results and "context_chunks_json" in session:
+    ordered_chunks = []
+    if not grouped_results and "context_chunks_json" in session:
         print("🔁 Using previous context due to follow-up query.")
         ordered_chunks = sorted(session["context_chunks_json"], key=lambda x: x["chunk_index"])
     else:
-        # Deduplicate by row ID
         seen_row_ids = set()
-        unique_results = []
-        for r in results:
-            row_id = int(r["row_id"])
-            if row_id not in seen_row_ids:
-                unique_results.append(r)
-                seen_row_ids.add(row_id)
-        unique_results.sort(key=lambda x: x["distance_score"])
-        ordered_chunks = sorted(unique_results, key=lambda x: x["chunk_index"])
+        for recipe in grouped_results:
+            for r in recipe["chunks"]:
+                row_id = int(r["row_id"])
+                if row_id not in seen_row_ids:
+                    ordered_chunks.append({
+                        "row_id": r["row_id"],
+                        "chunk_index": r["chunk_index"],
+                        "distance_score": r["distance_score"],
+                        "text": r.get("text", "[No content found]")
+                    })
+                    seen_row_ids.add(row_id)
+        ordered_chunks.sort(key=lambda x: x["distance_score"])
 
     # Store result in session
     if "context_chunks_json" not in session:
