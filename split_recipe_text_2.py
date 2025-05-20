@@ -2,7 +2,7 @@ import os
 import sqlite3
 import tiktoken
 
-#Step 2: Splitting the FDD Text into Chunks
+# Step 2: Splitting the recipe text into chunks
 
 # Configurations
 DB_PATH = "recipe_text_chunks.db"
@@ -45,8 +45,8 @@ def store_chunks_in_db(filename, chunks):
     conn.close()
     print(f"✅ Stored {len(chunks)} text chunks from {filename} in the database.")
 
-def process_fdd_text():
-    """Reads all cleaned FDD text files, splits them into chunks, and stores them in the database."""
+def process_recipe_text():
+    """Reads all cleaned recipe text files, splits them into chunks, and stores them in the database."""
     if not os.path.exists(INPUT_FOLDER):
         print(f"🚨 Error: `{INPUT_FOLDER}` folder not found. Ensure text files exist.")
         return
@@ -67,4 +67,4 @@ def process_fdd_text():
         print(f"✅ Processed and stored chunks from {file}.")
 
 if __name__ == "__main__":
-    process_fdd_text()
+    process_recipe_text()
