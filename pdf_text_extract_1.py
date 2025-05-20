@@ -53,7 +53,7 @@ def is_section_heading(text, next_line):
     # Example: If it's fully capitalized, assume it's a heading
     if text.isupper():
         return True
-    # Detect common FDD section patterns like "ITEM 1: OVERVIEW"
+    # Detect common document section patterns like "ITEM 1: OVERVIEW"
     if re.match(r"^ITEM \d+[:\s]", text, re.IGNORECASE):
         return True
     # If the next line is empty or a separator, treat it as a heading

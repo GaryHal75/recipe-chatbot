@@ -17,15 +17,15 @@ if not API_KEY:
 client = openai.Client(api_key=API_KEY)
 
 # Database path (Adjust if needed)
-DB_PATH = "fdd_text_chunks.db"
+DB_PATH = "recipe_text_chunks.db"
 
 # JSON output path
-JSON_OUTPUT_PATH = "franchise_map.json"
+JSON_OUTPUT_PATH = "recipe_map.json"
 
 # Function to clean up text before processing
-def clean_fdd_text(text):
+def clean_text(text):
     """
-    Cleans up the FDD text by removing unnecessary elements while preserving franchise names.
+    Cleans up the recipe text by removing unnecessary elements while preserving recipe names.
     - Removes boilerplate headers, emails, URLs, phone numbers, and excess whitespace.
     """
     text = re.sub(r"(?i)FRANCHISE DISCLOSURE DOCUMENT", "", text)
@@ -36,10 +36,10 @@ def clean_fdd_text(text):
     text = re.sub(r"\b\d{8,}\b", "", text)  # Remove large document numbers
     return text.strip()
 
-# Function to fetch relevant FDD chunks from database for a specific filename
-def fetch_fdd_chunks(filename):
+# Function to fetch relevant text chunks from database for a specific filename
+def fetch_recipe_chunks(filename):
     """
-    Retrieves FDD text chunks and their chunk ranges where is_deleted = 0 for a specific filename.
+    Retrieves recipe text chunks and their chunk ranges where is_deleted = 0 for a specific filename.
     """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -56,10 +56,10 @@ def fetch_fdd_chunks(filename):
     
     return results  # Returns a list of chunks
 
-# Function to extract franchise names using ChatGPT
-def extract_franchise_names(text_chunk):
+# Function to extract recipe names using ChatGPT
+def extract_recipe_names(text_chunk):
     """
-    Uses OpenAI's ChatGPT to extract franchise names from the given text chunk.
+    Uses OpenAI's ChatGPT to extract recipe names from the given text chunk.
     - Ensures structured output in a list format.
     - Handles token constraints by limiting input size.
     """
@@ -78,24 +78,24 @@ def extract_franchise_names(text_chunk):
     for i, chunk in enumerate(text_chunks):
         print(f"📊 Token count for chunk {i + 1}: {len(encoding.encode(chunk))}")
         prompt = f"""
-        Extract all franchise brand names from the following Franchise Disclosure Document (FDD) text.
-        - Return ONLY franchise names.
-        - Do NOT include legal descriptors (LLC, Inc., Corp.).
+        Extract all recipe names from the following document text.
+        - Return ONLY recipe names.
+        - Do NOT include any extra descriptors.
         - Ignore addresses, phone numbers, and website links.
-        - Output each franchise name on a separate line.
+        - Output each recipe name on a separate line.
 
         **Text:**
         ---
         {chunk}
         ---
 
-        **Output only the franchise names as a numbered list.**
+        **Output only the recipe names as a numbered list.**
         """
 
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
-                {"role": "system", "content": "You are an AI that extracts franchise names from text."},
+                {"role": "system", "content": "You are an AI that extracts recipe names from text."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0,
@@ -106,14 +106,14 @@ def extract_franchise_names(text_chunk):
         names = {line.split(". ", 1)[-1].strip() for line in extracted_text.split("\n") if line.strip()}
         extracted_names.update(names)  # Add to set to ensure uniqueness
     
-    return sorted(extracted_names)  # Returns sorted, deduplicated franchise names
+    return sorted(extracted_names)  # Returns sorted, deduplicated recipe names
 
-# Main function to process FDDs and store franchise names in JSON
-def process_franchise_names():
+# Main function to process recipe documents and store recipe names in JSON
+def process_recipe_names():
     """
-    Processes franchise names from FDD chunks, cleans the text, and generates franchise_map.json.
+    Processes recipe names from text chunks, cleans the text, and generates recipe_map.json.
     """
-    franchise_map = {}
+    recipe_map = {}
 
     # Fetch unique filenames from database
     conn = sqlite3.connect(DB_PATH)
@@ -123,7 +123,7 @@ def process_franchise_names():
     conn.close()
 
     for (filename,) in filenames:
-        chunks = fetch_fdd_chunks(filename)
+        chunks = fetch_recipe_chunks(filename)
         print(f"🔍 Processing file: {filename} ({len(chunks)} chunks)")
 
         issuance_date_match = None
@@ -137,23 +137,23 @@ def process_franchise_names():
         else:
             year = 0
 
-        # Pass 1: Extract the Primary Franchise Name (Only chunk_index = 0)
+        # Pass 1: Extract the primary recipe name (only chunk_index = 0)
         primary_chunk = next((content for row_id, content, chunk_index in chunks if chunk_index == 0), None)
         if primary_chunk:
-            cleaned_primary_text = clean_fdd_text(primary_chunk)
-            primary_franchise_names = extract_franchise_names(cleaned_primary_text)
-            primary_franchise_name = primary_franchise_names[0] if primary_franchise_names else None
+            cleaned_primary_text = clean_text(primary_chunk)
+            primary_recipe_names = extract_recipe_names(cleaned_primary_text)
+            primary_recipe_name = primary_recipe_names[0] if primary_recipe_names else None
 
         # Pass 2: Process the rest of the chunks for JSON mapping
         for row_id, content, chunk_index in chunks:
-            cleaned_text = clean_fdd_text(content)
-            franchise_names = [primary_franchise_name] if primary_franchise_name else extract_franchise_names(cleaned_text)
+            cleaned_text = clean_text(content)
+            recipe_names = [primary_recipe_name] if primary_recipe_name else extract_recipe_names(cleaned_text)
 
-            for name in franchise_names:
-                franchise_key = f"{name}_{year}"
-                print(f"✍ Extracted franchise: {name} ({franchise_key})")
-                if franchise_key not in franchise_map:
-                    franchise_map[franchise_key] = {
+            for name in recipe_names:
+                recipe_key = f"{name}_{year}"
+                print(f"✍ Extracted recipe: {name} ({recipe_key})")
+                if recipe_key not in recipe_map:
+                    recipe_map[recipe_key] = {
                         "name": name,
                         "year": year,
                         "filename": filename,
@@ -162,16 +162,16 @@ def process_franchise_names():
                         "related_doc_row_ids": [],
                         "created_at": datetime.now().strftime("%Y-%m-%d")
                     }
-                if row_id not in franchise_map[franchise_key]["related_doc_row_ids"]:
-                    franchise_map[franchise_key]["related_doc_row_ids"].append(row_id)
-                    franchise_map[franchise_key]["last_row_id"] = max(franchise_map[franchise_key]["last_row_id"], row_id)
+                if row_id not in recipe_map[recipe_key]["related_doc_row_ids"]:
+                    recipe_map[recipe_key]["related_doc_row_ids"].append(row_id)
+                    recipe_map[recipe_key]["last_row_id"] = max(recipe_map[recipe_key]["last_row_id"], row_id)
 
-    # Write the extracted franchise names to a JSON file
+    # Write the extracted recipe names to a JSON file
     with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(franchise_map, f, indent=4)
+        json.dump(recipe_map, f, indent=4)
 
-    print(f"✅ Franchise extraction complete! {len(franchise_map)} franchises saved to {JSON_OUTPUT_PATH}")
+    print(f"✅ Recipe extraction complete! {len(recipe_map)} recipes saved to {JSON_OUTPUT_PATH}")
 
 # Run the process when script is executed
 if __name__ == "__main__":
-    process_franchise_names()
+    process_recipe_names()

@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-#Create text chunk database to store text chunks from FDDs once they are converted to text document.  
+# Create text chunk database to store text chunks extracted from recipe PDFs.
 
 # Database path
 DB_PATH = "recipe_text_chunks.db"
