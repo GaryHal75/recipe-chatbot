@@ -7,6 +7,7 @@ import re
 from dotenv import load_dotenv
 from search_faiss_5 import search_and_filter
 from flask_session import Session
+import sqlite3
 
 load_dotenv()
 API_KEY = os.getenv("OPENAI_API_KEY")
@@ -34,6 +35,11 @@ def is_followup_query(query):
 @app.route("/")
 def home():
     session.clear()
+    session["token_usage"] = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "estimated_cost_usd": 0.0
+    }
     return render_template("index.html")
 
 def stream_gpt_response(user_query, context_text, chat_history):
@@ -68,18 +74,49 @@ def stream_gpt_response(user_query, context_text, chat_history):
     })
 
     import tiktoken
-    encoding = tiktoken.encoding_for_model("gpt-4")
-    token_count = sum(len(encoding.encode(m["content"])) for m in messages)
-    print(f"🧮 Total token count into GPT: {token_count}")
+    encoding = tiktoken.encoding_for_model("gpt-4o")
+    input_token_count = sum(len(encoding.encode(m["content"])) for m in messages)
+    print(f"🧮 Total token count into GPT: {input_token_count}")
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=messages,
         stream=True
     )
-    for chunk in response:
-        if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+
+    def generate():
+        output_token_count = 0
+        full_text = ""
+        for chunk in response:
+            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                text = chunk.choices[0].delta.content
+                full_text += text
+                output_token_count += len(encoding.encode(text))
+                yield text
+
+        # Update session usage outside of response streaming
+        from flask import has_request_context
+        if has_request_context():
+            if "token_usage" not in session:
+                session["token_usage"] = {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "estimated_cost_usd": 0.0
+                }
+
+            session["token_usage"]["input_tokens"] += input_token_count
+            session["token_usage"]["output_tokens"] += output_token_count
+            input_cost = input_token_count * 0.005 / 1000
+            output_cost = output_token_count * 0.015 / 1000
+            session["token_usage"]["estimated_cost_usd"] += input_cost + output_cost
+
+            print(f"💵 Input Tokens: {input_token_count} | Output Tokens: {output_token_count}")
+            print(f"💰 Session Estimated Cost: ${session['token_usage']['estimated_cost_usd']:.4f}")
+        else:
+            print(f"💵 Input Tokens: {input_token_count} | Output Tokens: {output_token_count}")
+            print("⚠️ No request context, token usage not tracked in session.")
+
+    return generate()
 
 @app.route("/search", methods=["POST"])
 def search():
@@ -143,7 +180,7 @@ def search():
     # Token-aware context trim
     import tiktoken
     encoding = tiktoken.encoding_for_model("gpt-4")
-    token_budget = 7000
+    token_budget = 21000
     context_chunks = []
     total_tokens = 0
 
@@ -166,6 +203,30 @@ def search():
     session["chat_history"].append({"role": "assistant", "content": "Generating response..."})
     try:
         return Response(stream_gpt_response(user_query, context_text, session["chat_history"]), content_type='text/event-stream')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/session-cost")
+def session_cost():
+    usage = session.get("token_usage", {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "estimated_cost_usd": 0.0
+    })
+    return jsonify(usage)
+
+
+# New route to list recipe titles from the database
+@app.route("/list-titles")
+def list_titles():
+    db_path = "recipe_text_chunks.db"  # Update path if your DB is elsewhere
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT(filename) FROM recipe_embeddings")
+            rows = cursor.fetchall()
+            titles = [row[0] for row in rows]
+        return jsonify({"titles": titles})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
